@@ -6,6 +6,10 @@
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "filesys/off_t.h"
+#include "devices/block.h"
+#include "devices/input.c"
 
 void user_vaddr_cond(const void *vaddr)
 {
@@ -97,6 +101,12 @@ void exit(int status)
 {
   struct thread *cur_thread=thread_current();
   cur_thread->exit_status=status;
+  int tmp_idx;
+  for(tmp_idx=3; tmp_idx<128; tmp_idx++)
+  {
+    if(cur_thread->fd[tmp_idx] != NULL)
+      close(tmp_idx);
+  }
   printf("%s: exit(%d)\n", thread_name(), status);
   thread_exit();
 }
@@ -108,7 +118,6 @@ pid_t exec(const char *file)
 
 int wait(pid_t pid)
 {
-  //TODO: we have to implement process_wait later!!!
   return process_wait(pid);
 }
 
@@ -130,35 +139,108 @@ bool remove(const char *file)
 
 int open(const char *file)
 {
-  
+  user_vaddr_cond(file);
+  if(file==NULL)
+    exit(-1);
+  struct file *new_file=filesys_open(file);
+  if(new_file==NULL)
+    return -1;
+  else
+  {
+    int tmp_fd;
+    for(tmp_fd=3; tmp_fd<128; tmp_fd++)
+    {
+      if(thread_current()->fd[tmp_fd]==NULL)
+      {
+        if(strcmp(thread_current()->name, file)==false)
+          file_deny_write(new_file);
+        thread_current()->fd[tmp_fd]=new_file;
+        return i;
+      }
+    }
+  }
 }
 
 int filesize(int fd)
 {
-  
+  if(thread_current()->fd[fd] != NULL)
+    return file_length(thread_current()->fd[fd]);
+  else
+    exit(-1);
 }
 
 int read(int fd, void *buffer, unsigned length)
 {
-  
+  user_vaddr_cond(buffer);
+  if(fd==0)
+  {
+    int tmp_stdin_idx;
+    char *cur_buf_ptr=buffer;
+    for(tmp_stdin_idx=0; tmp_stdin_idx<size; tmp_stdin_idx++)
+    {
+      char tmp_input=input_getc();
+      *buf=tmp_input;
+      buf++;
+      if(tmp_input=='\0')
+        break;
+    }
+    return tmp_stdin_idx;
+  }
+  else
+  {
+    struct file *file_for_read=thread_current()->fd[fd];
+    if(file_for_read==NULL)
+      exit(-1);
+    else
+      return file_read(file_for_read, buffer, size);
+  }
 }
 
 int write(int fd, const void *buffer, unsigned length)
 {
-  
+  user_vaddr_cond(buffer);
+  if(fd==1)
+  {
+    putbuf(buffer, size);
+    return size;
+  }
+  else
+  {
+    struct file *file_for_write=thread_current->fd[fd];
+    if(file_for_write==NULL)
+      exit(-1);
+    if(file_for_write->deny_write)
+      file_deny_write(file_for_write);
+    return file_write(file_for_write, buffer, size);
+  }
 }
 
 void seek(int fd, unsigned position)
 {
-
+  struct file *file_for_seek=thread_current()->fd[fd];
+  if(file_for_seek==NULL)
+    exit(-1);
+  else
+    return file_seek(file_for_seek, position);
 }
 
 unsigned tell(int fd)
 {
-  
+  struct file *file_for_tell=thread_current()->fd[fd];
+  if(file_for_tell==NULL)
+    exit(-1);
+  else
+    return file_tell(file_for_seek);
 }
 
 void close(int fd)
 {
-  
+  struct file *file_for_close=thread_current()->fd[fd];
+  if(file_for_close==NULL)
+    exit(-1);
+  else
+  {
+    thread_current()->fd[fd]=NULL;
+    file_close(file_for_close);
+  }
 }
