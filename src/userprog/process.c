@@ -45,6 +45,7 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (token, PRI_DEFAULT, start_process, fn_copy);
+  sema_down(&thread_current()->load_lock);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -87,11 +88,13 @@ start_process (void *file_name_)
     argument_stack(arg_argv, arg_argc, &if_.esp);
     if_.edi=arg_argc;
     if_.esi=if_.esp+4;
+    free(arg_argv);
   }
   hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
+  sema_up(&thread_current()->parent_thread->load_lock);
   if (!success) 
     thread_exit ();
 
@@ -151,6 +154,23 @@ void argument_stack(char **argv, int argc, void **esp)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  //code modify-for implementing process_wait with monitor(condition variable)
+  struct thread *cur_thread=thread_current();
+  struct list_elem *tmp_childelem;
+  struct thread *tmp_thread;
+
+  for(tmp_childelem=list_begin(&cur_thread->child_list); tmp_childelem!=list_end(&cur_thread->child_list); tmp_childelem=list_next(tmp_childelem))
+  {
+    tmp_thread=list_entry(tmp_childelem, struct thread, childelem);
+    if(tmp_thread->tid==child_tid)
+    {
+      sema_down(&tmp_thread->child_lock);
+      int exit_status=tmp_thread->exit_status;
+      list_remove(&tmp_thread->childelem);
+      sema_up(&tmp_thread->memory_lock);
+      return exit_status;
+    }
+  }
   return -1;
 }
 
@@ -177,6 +197,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  //code modify-for implementing synchronization with process_wait
+  sema_up(&cur->child_lock);
+  sema_down(&cur->memory_lock);
 }
 
 /* Sets up the CPU for running user code in the current

@@ -470,6 +470,19 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+
+  //code modify-for initializing additional members
+#ifdef USERPROG
+  t->parent_thread=running_thread();
+  list_init(&t->child_list);
+  list_push_back(&t->parent_thread->child_list, &t->childelem);
+  sema_init(&t->load_lock, 0);
+  sema_init(&t->memory_lock, 0);
+  sema_init(&t->child_lock, 0);
+  int userprog_tmp_idx;
+  for(userprog_tmp_idx=0; userprog_tmp_idx<128; userprog_tmp_idx++)
+    t->fd[userprog_tmp_idx]=NULL;
+#endif
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

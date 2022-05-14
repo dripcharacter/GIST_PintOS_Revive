@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "filesys/file.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -90,8 +91,6 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    //code modify-for adding exit_status member
-    int exit_status;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -99,6 +98,16 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    //code modify-for adding other members
+    int exit_status;
+    struct thread *parent_thread;
+    struct file *fd[128];
+    struct list child_list;
+    struct list_elem childelem;
+    //code modify-for adding synchronization
+    struct semaphore load_lock;
+    struct semaphore memory_lock;
+    struct semaphore child_lock;
 #endif
 
     /* Owned by thread.c. */
