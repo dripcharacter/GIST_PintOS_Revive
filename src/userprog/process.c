@@ -22,6 +22,13 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+void parse_filename(char *src, char *dest) {
+  int i;
+  strlcpy(dest, src, strlen(src) + 1);
+  for (i=0; dest[i]!='\0' && dest[i] != ' '; i++);
+  dest[i] = '\0';
+}
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -43,11 +50,8 @@ process_execute (const char *file_name)
   char *tmp_ptr;
   char *token=strtok_r(file_name, DELIM_CHARS, &tmp_ptr);
   
-  printf("we will check filesys_open@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
-  printf("this is token=%s@@@@@@@@@@@@@@@@@@@@\n", token);
   if(filesys_open(token)==NULL)
   {
-    printf("now jott-daem@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
     return -1;
   }
 
@@ -81,7 +85,7 @@ start_process (void *file_name_)
   bool success;
 
   //code modify-for argument tokenize
-  char *fn_copy=(char *)malloc (sizeof (file_name));
+  char *fn_copy=(char *)malloc (sizeof (file_name)+1);
   strlcpy (fn_copy, file_name, strlen(file_name) + 1);
   int arg_argc=0;
   char *arg_argv[128];
@@ -95,11 +99,37 @@ start_process (void *file_name_)
     arg_argc++;
   }
 
+  int tmp_int=0;
+  for(tmp_int=0; tmp_int<arg_argc; tmp_int++)
+  {
+    printf("cur_idx %d's argv:", tmp_int, *arg_argv[tmp_int]);
+    int tmp_tmp_int=0;
+    while(arg_argv[tmp_int][tmp_tmp_int]!='\0')
+    {
+      printf("%x", arg_argv[tmp_int][tmp_tmp_int]);
+      tmp_tmp_int++;
+    }
+    printf("\n");
+  }
+  for(tmp_int=0; tmp_int<arg_argc; tmp_int++)
+  {
+    printf("cur_idx %d's argv:", tmp_int, *arg_argv[tmp_int]);
+    int tmp_tmp_int=0;
+    while(arg_argv[tmp_int][tmp_tmp_int]!='\0')
+    {
+      printf("%c", arg_argv[tmp_int][tmp_tmp_int]);
+      tmp_tmp_int++;
+    }
+    printf("\n");
+  }
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+  printf("arg_argv[0]=%s\n@@@@@@@@\n", arg_argv[0]);
+  if(!is_user_vaddr(arg_argv[0]))
+    printf("\n\n\n\nthis is not user address\n\n\n\n");
   success = load (arg_argv[0], &if_.eip, &if_.esp);
 
   //code modify-for argument load to user stack
@@ -111,12 +141,14 @@ start_process (void *file_name_)
     free(fn_copy);
   }
   //hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
-
+  
+  
   /* If load failed, quit. */
   palloc_free_page (file_name);
   sema_up(&thread_current()->parent_thread->load_lock);
-  if (!success) 
+  if (!success) { 
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -143,7 +175,7 @@ void argument_stack(char **argv, int argc, void **esp)
 
   while(true)
   {
-    if((int)(*esp) % 4 != 0)
+    if((PHYS_BASE - *esp) % 4 != 0)
       break;
     *esp -= sizeof (uint8_t);
     **(uint8_t **)esp = 0;
@@ -178,7 +210,7 @@ void argument_stack(char **argv, int argc, void **esp)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
   //code modify-for implementing process_wait with monitor(condition variable)
   struct thread *cur_thread=thread_current();
