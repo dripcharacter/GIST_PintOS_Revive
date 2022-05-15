@@ -49,7 +49,6 @@ process_execute (const char *file_name)
   //code modify-for tokenize
   char *tmp_ptr;
   char *token=strtok_r(file_name, DELIM_CHARS, &tmp_ptr);
-  
   if(filesys_open(token)==NULL)
   {
     return -1;
@@ -84,52 +83,52 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  //code modify-for argument tokenize
-  char *fn_copy=(char *)malloc (sizeof (file_name)+1);
-  strlcpy (fn_copy, file_name, strlen(file_name) + 1);
-  int arg_argc=0;
-  char *arg_argv[128];
-
-  char *tmp_ptr;
-  char *token=strtok_r(fn_copy, DELIM_CHARS, &tmp_ptr);
-  while(token!=NULL)
-  {
-    arg_argv[arg_argc]=token;
-    token=strtok_r(NULL, DELIM_CHARS, &tmp_ptr);
-    arg_argc++;
-  }
-
-  int tmp_int=0;
-  for(tmp_int=0; tmp_int<arg_argc; tmp_int++)
-  {
-    printf("cur_idx %d's argv:", tmp_int, *arg_argv[tmp_int]);
-    int tmp_tmp_int=0;
-    while(arg_argv[tmp_int][tmp_tmp_int]!='\0')
-    {
-      printf("%x", arg_argv[tmp_int][tmp_tmp_int]);
-      tmp_tmp_int++;
-    }
-    printf("\n");
-  }
-  for(tmp_int=0; tmp_int<arg_argc; tmp_int++)
-  {
-    printf("cur_idx %d's argv:", tmp_int, *arg_argv[tmp_int]);
-    int tmp_tmp_int=0;
-    while(arg_argv[tmp_int][tmp_tmp_int]!='\0')
-    {
-      printf("%c", arg_argv[tmp_int][tmp_tmp_int]);
-      tmp_tmp_int++;
-    }
-    printf("\n");
-  }
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  printf("arg_argv[0]=%s\n@@@@@@@@\n", arg_argv[0]);
-  if(!is_user_vaddr(arg_argv[0]))
-    printf("\n\n\n\nthis is not user address\n\n\n\n");
+
+  //code modify-for argument tokenize
+  char *fn_copy=(char *)malloc (sizeof (file_name));
+  strlcpy (fn_copy, file_name, strlen(file_name) + 1);
+  int arg_argc=0;
+  char **arg_argv;
+ 
+  char *tmp_ptr;
+  char *ptr;
+  char *token=strtok_r(fn_copy, DELIM_CHARS, &tmp_ptr);
+  arg_argc++;
+  ptr=tmp_ptr;
+  while(token!=NULL)
+  {
+    token=strtok_r(ptr, DELIM_CHARS, &tmp_ptr);
+    arg_argc++;
+    ptr=tmp_ptr;
+  }
+  arg_argc--;
+  free(fn_copy);
+
+  arg_argv = (char **)malloc(sizeof(char *) * arg_argc);
+  ptr=file_name;
+
+  int i=0;
+  token = strtok_r (ptr, " ", &tmp_ptr);
+  arg_argv[i] = token;
+  i++;
+  ptr=tmp_ptr;
+  while (i != arg_argc)
+  {
+    token = strtok_r (ptr, " ", &tmp_ptr);
+    arg_argv[i] = token;
+    i ++;
+    ptr = tmp_ptr;
+  }
+/*
+  memset (&if_, 0, sizeof if_);
+  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
+  if_.cs = SEL_UCSEG;
+  if_.eflags = FLAG_IF | FLAG_MBS;*/
   success = load (arg_argv[0], &if_.eip, &if_.esp);
 
   //code modify-for argument load to user stack
@@ -366,10 +365,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  printf("\n\n\n\n\n\n\n\n\n\n");
-  printf("file_name in load:%s\n", file_name);
-  if(!is_user_vaddr(file_name))
-    printf("\n\n\n\nthis is not user address\n\n\n\n");
   file = filesys_open (file_name);
   if (file == NULL) 
     {
