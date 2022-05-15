@@ -22,13 +22,6 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-void parse_filename(char *src, char *dest) {
-  int i;
-  strlcpy(dest, src, strlen(src) + 1);
-  for (i=0; dest[i]!='\0' && dest[i] != ' '; i++);
-  dest[i] = '\0';
-}
-
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -92,14 +85,15 @@ start_process (void *file_name_)
   //code modify-for argument tokenize
   char *fn_copy=(char *)malloc (sizeof (file_name));
   strlcpy (fn_copy, file_name, strlen(file_name) + 1);
+
   int arg_argc=0;
-  char **arg_argv;
- 
+  char **arg_argv; 
   char *tmp_ptr;
   char *ptr;
   char *token=strtok_r(fn_copy, DELIM_CHARS, &tmp_ptr);
   arg_argc++;
   ptr=tmp_ptr;
+
   while(token!=NULL)
   {
     token=strtok_r(ptr, DELIM_CHARS, &tmp_ptr);
@@ -113,32 +107,25 @@ start_process (void *file_name_)
   ptr=file_name;
 
   int i=0;
-  token = strtok_r (ptr, " ", &tmp_ptr);
+  token = strtok_r (ptr, DELIM_CHARS, &tmp_ptr);
   arg_argv[i] = token;
   i++;
   ptr=tmp_ptr;
   while (i != arg_argc)
   {
-    token = strtok_r (ptr, " ", &tmp_ptr);
+    token = strtok_r (ptr, DELIM_CHARS, &tmp_ptr);
     arg_argv[i] = token;
-    i ++;
+    i++;
     ptr = tmp_ptr;
   }
-/*
-  memset (&if_, 0, sizeof if_);
-  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
-  if_.cs = SEL_UCSEG;
-  if_.eflags = FLAG_IF | FLAG_MBS;*/
   success = load (arg_argv[0], &if_.eip, &if_.esp);
 
   //code modify-for argument load to user stack
   if (success)
   {
     argument_stack(arg_argv, arg_argc, &if_.esp);
-    if_.edi=arg_argc;
-    if_.esi=if_.esp+4;
-    free(fn_copy);
   }
+  free(arg_argv);
   //hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
   
   
@@ -176,7 +163,7 @@ void argument_stack(char **argv, int argc, void **esp)
   {
     if((PHYS_BASE - *esp) % 4 != 0)
       break;
-    *esp -= sizeof (uint8_t);
+    *esp -= sizeof(uint8_t);
     **(uint8_t **)esp = 0;
   }
   
