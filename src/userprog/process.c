@@ -42,12 +42,32 @@ process_execute (const char *file_name)
   //code modify-for tokenize
   char *tmp_ptr;
   char *token=strtok_r(file_name, DELIM_CHARS, &tmp_ptr);
+  
+  printf("we will check filesys_open@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+  printf("this is token=%s@@@@@@@@@@@@@@@@@@@@\n", token);
+  if(filesys_open(token)==NULL)
+  {
+    printf("now jott-daem@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+    return -1;
+  }
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (token, PRI_DEFAULT, start_process, fn_copy);
   sema_down(&thread_current()->load_lock);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+
+  //code modify-for waiting child process
+  struct thread *cur_thread=thread_current();
+  struct list_elem *tmp_childelem;
+  struct thread *tmp_thread;
+  
+  for(tmp_childelem=list_begin(&cur_thread->child_list); tmp_childelem!=list_end(&cur_thread->child_list); tmp_childelem=list_next(tmp_childelem))
+  {
+    tmp_thread=list_entry(tmp_childelem, struct thread, childelem);
+    if(tmp_thread->exit_status==-1)
+      return process_wait(tid);
+  }
   return tid;
 }
 
@@ -62,7 +82,7 @@ start_process (void *file_name_)
 
   //code modify-for argument tokenize
   char *fn_copy=(char *)malloc (sizeof (file_name));
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy, file_name, strlen(file_name) + 1);
   int arg_argc=0;
   char *arg_argv[128];
 
@@ -88,9 +108,9 @@ start_process (void *file_name_)
     argument_stack(arg_argv, arg_argc, &if_.esp);
     if_.edi=arg_argc;
     if_.esi=if_.esp+4;
-    free(arg_argv);
+    free(fn_copy);
   }
-  hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
+  //hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -125,21 +145,27 @@ void argument_stack(char **argv, int argc, void **esp)
   {
     if((int)(*esp) % 4 != 0)
       break;
-    (*esp)--;
-    **(char ***)esp = 0;
+    *esp -= sizeof (uint8_t);
+    **(uint8_t **)esp = 0;
+  }
+  
+  *esp -= 4;
+  *(uint8_t *)*esp = 0;
+  
+  for(idx=argc-1; idx>=0; idx--)
+  {
+    *esp -= sizeof (uint32_t **);
+    *(uint32_t **)*esp = argv_ptr_arr[idx];
   }
 
-  for(idx=argc; idx>=0; idx--)
-  {
-    (*esp)-=4;
-    if(idx==argc)
-      memset((*esp), 0, sizeof(char **));
-    else
-      memcpy((*esp), &argv_ptr_arr[idx], sizeof(char **));
-  }
+  *esp -= sizeof (uint32_t **);
+  *(uint32_t *)*esp = *esp + 4;
+
+  *esp -= sizeof (uint32_t);
+  *(uint32_t *)*esp = argc;
 
   (*esp)-=4;
-  memset((*esp), 0, sizeof(void *));
+  *(uint32_t *)*esp = 0;
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
@@ -308,6 +334,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  printf("\n\n\n\n\n\n\n\n\n\n");
+  printf("file_name in load:%s\n", file_name);
+  if(!is_user_vaddr(file_name))
+    printf("\n\n\n\nthis is not user address\n\n\n\n");
   file = filesys_open (file_name);
   if (file == NULL) 
     {

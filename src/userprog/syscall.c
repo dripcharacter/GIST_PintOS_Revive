@@ -9,7 +9,6 @@
 #include "filesys/file.h"
 #include "filesys/off_t.h"
 #include "devices/block.h"
-#include "devices/input.c"
 
 void user_vaddr_cond(const void *vaddr)
 {
@@ -28,7 +27,8 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  switch(*(uint32_t*)f->esp)
+  //printf("syscall : %d\n",*(uint32_t *)(f->esp));
+  switch(*(uint32_t*)(f->esp))
   {
     case SYS_HALT:
       halt();
@@ -43,12 +43,12 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_WAIT:
       user_vaddr_cond(f->esp + 4);
-      f->eax = wait ((pid_t *)*(uint32_t *)(f->esp + 4));
+      f->eax = wait ((pid_t)*(int *)(f->esp + 4));
       break;
     case SYS_CREATE:
       user_vaddr_cond(f->esp + 4);
       user_vaddr_cond(f->esp + 8);
-      f->eax=create((const char *)*(uint32_t *)(f->esp + 4), (const char *)*(uint32_t *)(f->esp + 8));
+      f->eax=create((const char *)*(uint32_t *)(f->esp + 4), (unsigned)*(uint32_t *)(f->esp + 8));
       break;
     case SYS_REMOVE:
       user_vaddr_cond(f->esp + 4);
@@ -77,7 +77,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_SEEK:
       user_vaddr_cond(f->esp + 4);
       user_vaddr_cond(f->esp + 8);
-      f->eax=seek((int)*(uint32_t *)(f->esp + 4), (unsigned)*(uint32_t *)(f->esp + 8));
+      seek((int)*(uint32_t *)(f->esp + 4), (unsigned)*(uint32_t *)(f->esp + 8));
       break;
     case SYS_TELL:
       user_vaddr_cond(f->esp + 4);
@@ -85,7 +85,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_CLOSE:
       user_vaddr_cond(f->esp + 4);
-      f->eax=close((int)*(uint32_t *)(f->esp + 4));
+      close((int)*(uint32_t *)(f->esp + 4));
       break;
   }
   //printf ("system call!\n");
@@ -132,7 +132,7 @@ bool create(const char *file, unsigned initial_size)
 bool remove(const char *file)
 {
   if(file!=NULL)
-    return filesys_remove(file, initial_size);
+    return filesys_remove(file);
   else
     exit(-1);
 }
@@ -155,7 +155,7 @@ int open(const char *file)
         if(strcmp(thread_current()->name, file)==false)
           file_deny_write(new_file);
         thread_current()->fd[tmp_fd]=new_file;
-        return i;
+        return tmp_fd;
       }
     }
   }
@@ -169,18 +169,18 @@ int filesize(int fd)
     exit(-1);
 }
 
-int read(int fd, void *buffer, unsigned length)
+int read(int fd, void *buffer, unsigned size)
 {
   user_vaddr_cond(buffer);
   if(fd==0)
   {
-    int tmp_stdin_idx;
+    unsigned tmp_stdin_idx;
     char *cur_buf_ptr=buffer;
     for(tmp_stdin_idx=0; tmp_stdin_idx<size; tmp_stdin_idx++)
     {
       char tmp_input=input_getc();
-      *buf=tmp_input;
-      buf++;
+      *cur_buf_ptr=tmp_input;
+      cur_buf_ptr++;
       if(tmp_input=='\0')
         break;
     }
@@ -196,7 +196,7 @@ int read(int fd, void *buffer, unsigned length)
   }
 }
 
-int write(int fd, const void *buffer, unsigned length)
+int write(int fd, const void *buffer, unsigned size)
 {
   user_vaddr_cond(buffer);
   if(fd==1)
@@ -206,7 +206,7 @@ int write(int fd, const void *buffer, unsigned length)
   }
   else
   {
-    struct file *file_for_write=thread_current->fd[fd];
+    struct file *file_for_write=thread_current()->fd[fd];
     if(file_for_write==NULL)
       exit(-1);
     if(file_for_write->deny_write)
@@ -230,7 +230,7 @@ unsigned tell(int fd)
   if(file_for_tell==NULL)
     exit(-1);
   else
-    return file_tell(file_for_seek);
+    return file_tell(file_for_tell);
 }
 
 void close(int fd)
